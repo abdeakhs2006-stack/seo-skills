@@ -10,15 +10,15 @@ permissions:
 
 jobs:
   extract:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: "github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: claude/github-skills-monthly-LxiQT
-      - name: Extract and merge
+      - name: Extract archive
         run: |
-          set -x
+          set -euxo pipefail
           shopt -s nullglob dotglob
           mkdir _ext
           for z in *.zip; do
@@ -35,64 +35,14 @@ jobs:
           fi
           rm -rf _ext
           rm -f .github/workflows/extract-archive.yml
-      - name: Build commit via REST API
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            const { owner, repo } = context.repo;
-            const branch = 'claude/github-skills-monthly-LxiQT';
-
-            const files = [];
-            function walk(dir) {
-              for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-                if (ent.name === '.git') continue;
-                const full = path.join(dir, ent.name);
-                if (ent.isDirectory()) walk(full);
-                else files.push(full);
-              }
-            }
-            walk('.');
-            core.info(`Found ${files.length} files`);
-
-            // Create blobs
-            const tree = [];
-            for (const f of files) {
-              const content = fs.readFileSync(f).toString('base64');
-              const { data } = await github.rest.git.createBlob({
-                owner, repo, content, encoding: 'base64',
-              });
-              tree.push({
-                path: f.startsWith('./') ? f.slice(2) : f,
-                mode: '100644',
-                type: 'blob',
-                sha: data.sha,
-              });
-            }
-            core.info(`Created ${tree.length} blobs`);
-
-            const { data: refData } = await github.rest.git.getRef({
-              owner, repo, ref: `heads/${branch}`,
-            });
-            const baseSha = refData.object.sha;
-            const { data: baseCommit } = await github.rest.git.getCommit({
-              owner, repo, commit_sha: baseSha,
-            });
-
-            const { data: newTree } = await github.rest.git.createTree({
-              owner, repo, tree,
-              // Build a fresh tree (no base_tree) so removed files (zip, workflow) are gone
-            });
-
-            const { data: newCommit } = await github.rest.git.createCommit({
-              owner, repo,
-              message: 'Extract skills archive [skip ci]',
-              tree: newTree.sha,
-              parents: [baseSha],
-            });
-
-            await github.rest.git.updateRef({
-              owner, repo, ref: `heads/${branch}`, sha: newCommit.sha,
-            });
-            core.info(`Updated branch to ${newCommit.sha}`);
+      - name: Commit and push
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+            exit 0
+          fi
+          git commit -m "Extract skills archive [skip ci]"
+          git push origin HEAD:claude/github-skills-monthly-LxiQT
