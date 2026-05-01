@@ -1,0 +1,48 @@
+name: Extract skills archive
+
+on:
+  push:
+    branches: [claude/github-skills-monthly-LxiQT]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    if: "github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/github-skills-monthly-LxiQT
+      - name: Extract archive
+        run: |
+          set -euxo pipefail
+          shopt -s nullglob dotglob
+          mkdir _ext
+          for z in *.zip; do
+            unzip -q "$z" -d _ext
+            rm "$z"
+          done
+          for z in _ext/*.zip; do
+            unzip -q "$z" -d _ext
+            rm "$z"
+          done
+          INNER=( _ext/*/ )
+          if [ ${#INNER[@]} -ge 1 ]; then
+            rsync -a "${INNER[0]}" ./
+          fi
+          rm -rf _ext
+          rm -f .github/workflows/extract-archive.yml
+      - name: Commit and push
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+            exit 0
+          fi
+          git commit -m "Extract skills archive [skip ci]"
+          git push origin HEAD:claude/github-skills-monthly-LxiQT
