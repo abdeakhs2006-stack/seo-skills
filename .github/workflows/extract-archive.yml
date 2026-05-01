@@ -9,26 +9,47 @@ permissions:
   contents: write
 
 jobs:
-  probe:
+  extract:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: claude/github-skills-monthly-LxiQT
-      - name: Extract
+      - name: Extract and merge
         run: |
           set -x
-          shopt -s nullglob
+          shopt -s nullglob dotglob
           mkdir _ext
           for z in *.zip; do
             echo "Extracting $z"
             unzip -q "$z" -d _ext
+            rm "$z"
           done
           for z in _ext/*.zip; do
             echo "Extracting nested $z"
             unzip -q "$z" -d _ext
+            rm "$z"
           done
-          echo "=== After extraction ==="
           ls -la _ext
-          du -sh _ext
-          find _ext -maxdepth 2 -type d
+          INNER=( _ext/*/ )
+          echo "INNER=${INNER[@]}"
+          if [ ${#INNER[@]} -ge 1 ]; then
+            rsync -a "${INNER[0]}" ./
+          fi
+          rm -rf _ext
+          rm -f .github/workflows/extract-archive.yml
+          ls -la
+      - name: Commit and push
+        run: |
+          set -x
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          git status
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "Extract skills archive [skip ci]"
+          git push origin HEAD:claude/github-skills-monthly-LxiQT
