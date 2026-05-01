@@ -26,18 +26,19 @@ jobs:
           fi
           mkdir _ext
           for z in "${ZIPS[@]}"; do
+            echo "Extracting $z"
             unzip -q "$z" -d _ext
             rm "$z"
           done
-          # Handle nested zips (one level)
           for z in _ext/*.zip; do
+            echo "Extracting nested $z"
             unzip -q "$z" -d _ext
             rm "$z"
           done
-          # Move the inner directory contents up to repo root
           INNER=( _ext/*/ )
           if [ ${#INNER[@]} -ge 1 ]; then
-            mv "${INNER[0]}"* .
+            echo "Merging ${INNER[0]} into repo root"
+            cp -a "${INNER[0]}." ./
           fi
           rm -rf _ext
           rm -f .github/workflows/extract-archive.yml
