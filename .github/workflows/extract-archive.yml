@@ -10,50 +10,59 @@ permissions:
 
 jobs:
   extract:
-    if: "github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Hello
+        run: echo "Job started on $(uname -a)"
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           ref: claude/github-skills-monthly-LxiQT
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
+      - name: Show tree
+        run: ls -la
+      - name: Skip if no zip or already extracted
+        id: precheck
+        run: |
+          set -eux
+          shopt -s nullglob
+          ZIPS=( *.zip )
+          if [ ${#ZIPS[@]} -eq 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Extract archive
+        if: steps.precheck.outputs.skip == 'false'
         run: |
           set -euxo pipefail
           shopt -s nullglob dotglob
-          ls -la
           ZIPS=( *.zip )
-          if [ ${#ZIPS[@]} -eq 0 ]; then
-            echo "No zip file at repo root; nothing to do."
-            exit 0
-          fi
           mkdir _ext
           for z in "${ZIPS[@]}"; do
-            echo "Extracting $z"
             unzip -q "$z" -d _ext
             rm "$z"
           done
           for z in _ext/*.zip; do
-            echo "Extracting nested $z"
             unzip -q "$z" -d _ext
             rm "$z"
           done
-          ls -la _ext
           INNER=( _ext/*/ )
           if [ ${#INNER[@]} -ge 1 ]; then
-            echo "Merging ${INNER[0]} into repo root using rsync"
             rsync -a "${INNER[0]}" ./
           fi
           rm -rf _ext
           rm -f .github/workflows/extract-archive.yml
-          ls -la
-      - name: Commit extracted contents
+      - name: Commit and push
+        if: steps.precheck.outputs.skip == 'false'
         run: |
+          set -eux
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git add -A
-          git status
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+            echo "No changes"
             exit 0
           fi
           git commit -m "Extract skills archive [skip ci]"
