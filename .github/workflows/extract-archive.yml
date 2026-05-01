@@ -5,9 +5,14 @@ on:
     branches: [claude/github-skills-monthly-LxiQT]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Echo
-        run: echo "hello from $(uname -a)"
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/github-skills-monthly-LxiQT
+      - run: ls -la && du -sh .
