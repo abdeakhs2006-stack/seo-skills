@@ -15,4 +15,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: claude/github-skills-monthly-LxiQT
-      - run: ls -la && du -sh .
+      - name: Inspect environment
+        run: |
+          which unzip && unzip -v | head -2
+          ls -la
+      - name: List zips
+        run: |
+          set -x
+          shopt -s nullglob
+          for z in *.zip; do
+            echo "=== $z ==="
+            unzip -l "$z" | head -20
+          done
